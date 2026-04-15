@@ -1,4 +1,4 @@
-USE DB_T2_CAROLINA_GONZAGA_COSTA;
+USE DB_T2_CAROLINA_GONZAGA_COSTA; -- Define o banco de dados especificado como o banco ativo para todas as próximas consultas
 
 -- TABELAS
 
@@ -13,6 +13,22 @@ CREATE TABLE CONT_CUSTOMERS (
 -- Se quiser apagar tabela: DROP TABLE IF EXISTS CONT_CUSTOMERS;
 -- Consultando tabela de Clientes
 SELECT * FROM CONT_CUSTOMERS;
+
+
+-- Criando Tabela de Produto
+CREATE TABLE CONT_PRODUCT (
+    PRODUCT_ID INT PRIMARY KEY DEFAULT 1,
+    PRODUCT_NAME VARCHAR(50) NOT NULL DEFAULT 'RENDA FIXA',
+    -- CONSTRAINT para garantir que ninguém mude o ID 1
+    CONSTRAINT ONLY_ONE_PRODUCT CHECK (PRODUCT_ID = 1)
+);
+
+-- Para inserir o único produto permitido:
+INSERT INTO CONT_PRODUCT (PRODUCT_ID) VALUES (1);
+-- Consultando tabela de Produto
+SELECT * FROM CONT_PRODUCT;
+
+
 
 -- Criando Tabela de Investimentos
 CREATE TABLE CONT_INVESTMENTS (
@@ -33,33 +49,21 @@ CREATE TABLE CONT_INVESTMENTS (
 SELECT * FROM CONT_INVESTMENTS;
 
 
--- Criando Tabela de Produto
-CREATE TABLE CONT_PRODUCT (
-    PRODUCT_ID INT PRIMARY KEY DEFAULT 1,
-    PRODUCT_NAME VARCHAR(50) NOT NULL DEFAULT 'RENDA FIXA',
-    -- CONSTRAINT para garantir que ninguém mude o ID 1
-    CONSTRAINT ONLY_ONE_PRODUCT CHECK (PRODUCT_ID = 1)
-);
-
--- Para inserir o único produto permitido:
-INSERT INTO CONT_PRODUCT (PRODUCT_ID) VALUES (1);
--- Consultando tabela de Produto
-SELECT * FROM CONT_PRODUCT;
-
-
 -- Criando Tabela de Gastos Fixos
-CREATE TABLE FIXED_COSTS (
+CREATE TABLE CONT_FIXED_COSTS (
     ID_COST INT PRIMARY KEY AUTO_INCREMENT,
     DESCRIPTION VARCHAR(100) NOT NULL,
     AMOUNT DECIMAL(10, 2) NOT NULL
 );
 
 -- Inserção dos dados fixos de gastos
-INSERT INTO FIXED_COSTS (DESCRIPTION, AMOUNT) VALUES 
+INSERT INTO CONT_FIXED_COSTS (DESCRIPTION, AMOUNT) VALUES 
 ('RENT', 2000.00),
 ('DOMAIN', 30.00),
 ('SERVER', 30.00),
 ('GENERAL EXPENSES', 1000.00);
+
+-- DROP TABLE IF EXISTS CONT_FIXED_COSTS;
 -- Consultando tabela de Gastos Fixos
 SELECT * FROM CONT_FIXED_COSTS;
 
@@ -280,45 +284,52 @@ SELECT * FROM CONT_INVESTMENTS;
 
 -- Criando Procedure Cadastrar Cliente
 -- As tabelas de Clientes e Investimentos são sensibilidas nessa execução
-DELIMITER //
 
+-- Altera o delimitador padrão para // para que o bloco de código seja enviado ao servidor de uma só vez
+DELIMITER // 
 CREATE PROCEDURE INSERT_CUSTOMER(
-    IN p_FULL_NAME VARCHAR(100),
-    IN p_BIRTH_DATE DATE,
-    IN p_COUNTRY VARCHAR(50),
-    IN p_INVESTED_VALUE DECIMAL(15, 2)
+    IN p_FULL_NAME VARCHAR(100),      -- Parâmetro de entrada: Nome completo do cliente
+    IN p_BIRTH_DATE DATE,             -- Parâmetro de entrada: Data de nascimento do cliente
+    IN p_COUNTRY VARCHAR(50),         -- Parâmetro de entrada: País do cliente
+    IN p_INVESTED_VALUE DECIMAL(15, 2) -- Parâmetro de entrada: Valor inicial a ser investido
 )
-BEGIN
-    -- Variável para armazenar o ID do cliente recém criado
+BEGIN -- Inicia o bloco de execução da procedure
+    
+    -- Declara uma variável interna para guardar o ID que o banco vai gerar para o novo cliente
     DECLARE v_CUSTOMER_ID INT;
 
-    -- Início da transação para garantir que ambos os dados sejam gravados juntos
+    -- Inicia uma transação: garante que o cliente e o investimento sejam gravados juntos (ou nada será gravado se houver erro)
     START TRANSACTION;
 
-    -- 1. Insere o cliente na tabela de clientes
+    -- 1. Insere as informações básicas do cliente na tabela de clientes
     INSERT INTO CONT_CUSTOMERS (FULL_NAME, BIRTH_DATE, COUNTRY)
     VALUES (p_FULL_NAME, p_BIRTH_DATE, p_COUNTRY);
 
-    -- 2. Recupera o ID gerado para este novo cliente
+    -- 2. Captura o ID automático (AUTO_INCREMENT) que acabou de ser gerado pelo INSERT anterior
     SET v_CUSTOMER_ID = LAST_INSERT_ID();
 
-    -- 3. Insere o investimento vinculado ao cliente (usando PRODUCT_ID 1 como padrão)
+    -- 3. Registra o investimento na tabela de investimentos, vinculando-o ao ID do cliente capturado
+    -- O PRODUCT_ID 1 é usado como padrão e NOW() registra a data e hora exatas do cadastro
     INSERT INTO CONT_INVESTMENTS (CUSTOMER_ID, PRODUCT_ID, INVESTED_VALUE, ENTRY_DATE)
     VALUES (v_CUSTOMER_ID, 1, p_INVESTED_VALUE, NOW());
 
-    -- Confirma as alterações no banco de dados
+    -- Confirma e finaliza a transação, salvando permanentemente as alterações no banco de dados
     COMMIT;
     
-    -- Retorna o resultado para o usuário
-    SELECT 'RECORD INSERTED SUCCESSFULLY!' AS RESULTADO, v_CUSTOMER_ID AS NOVO_CLIENT_ID;
+        -- EXIBE NA TELA: Retorna uma mensagem de sucesso e o ID gerado para o usuário
+    SELECT 'CLIENTE CADASTRADO COM SUCESSO!' AS MENSAGEM, v_CUSTOMER_ID AS NOVO_ID;
 
-END //
+-- Finaliza o corpo da procedure
+END // 
 
-DELIMITER ;
-
+-- Restaura o delimitador padrão do sistema para ponto e vírgula (;)
+DELIMITER ; 
 
 -- Validar tabela Cliente Antes de Execução da Procedure Cadastrar Cliente
 SELECT * FROM CONT_CUSTOMERS;
+-- Validar tabela Investimentos Antes Execução da Procedure Cadastrar Cliente
+SELECT * FROM CONT_INVESTMENTS;
+
 
 -- Utilizar a Procedure Cadastrar Cliente
 CALL INSERT_CUSTOMER('John Doe', '1990-05-15', 'USA', 12345.00);
@@ -331,23 +342,28 @@ SELECT * FROM CONT_INVESTMENTS;
 
 -- Procedure Excluir Cliente
 -- As tabelas de Clientes e Investimentos são sensibilidas nessa execução
-DELIMITER //
+-- Altera o delimitador para // para que o banco de dados ignore os pontos e vírgulas internos
+DELIMITER // 
 
 CREATE PROCEDURE DELETE_CUSTOMER_BY_ID(
-    IN p_CUSTOMER_ID INT
+    IN p_CUSTOMER_ID INT -- Define um parâmetro de entrada para receber o ID do cliente que será excluído
 )
-BEGIN
-    -- 1. Deleta primeiro os registros na tabela filha (investimentos)
+BEGIN -- Inicia o bloco de execução da procedure
+    
+    -- 1. Deleta primeiro os registros na tabela de investimentos vinculados a este cliente
+    -- Isso é necessário para evitar erros de restrição de chave estrangeira (Foreign Key)
     DELETE FROM CONT_INVESTMENTS 
     WHERE CUSTOMER_ID = p_CUSTOMER_ID;
 
-    -- 2. Agora que não há vínculos, deleta o registro na tabela pai (cliente)
+    -- 2. Agora que os vínculos foram removidos, deleta o registro do cliente na tabela principal
     DELETE FROM CONT_CUSTOMERS 
     WHERE CUSTOMER_ID = p_CUSTOMER_ID;
-END //
 
-DELIMITER ;
+-- Finaliza o corpo da procedure com o delimitador definido no início
+END // 
 
+-- Restaura o delimitador padrão do sistema para ponto e vírgula (;)
+DELIMITER ; 
 
 -- Validar tabela Cliente Antes da execução da Procedure Excluir Cliente
 SELECT * FROM CONT_CUSTOMERS;
@@ -355,7 +371,7 @@ SELECT * FROM CONT_CUSTOMERS;
 SELECT * FROM CONT_INVESTMENTS;
 
 -- Utilizar a Procedure Excluir Cliente
-CALL DELETE_CUSTOMER_BY_ID(104);
+CALL DELETE_CUSTOMER_BY_ID(105);
 
 -- Validar tabela Cliente Após Execução da Procedure Excluir Cliente
 SELECT * FROM CONT_CUSTOMERS;
@@ -374,16 +390,17 @@ SELECT DISTINCT COUNTRY
 FROM CONT_CUSTOMERS;
 
 -- (1) Criando a Procedure
+ -- Altera o delimitador padrão (;) para //, permitindo que o bloco da procedure seja lido como um todo
+
 DELIMITER //
-
-CREATE PROCEDURE LIST_REGISTERED_COUNTRIES()
-BEGIN
-    SELECT DISTINCT COUNTRY 
-    FROM CONT_CUSTOMERS
-    ORDER BY COUNTRY ASC;
-END //
-
-DELIMITER ;
+CREATE PROCEDURE LIST_REGISTERED_COUNTRIES() -- Cria a procedure chamada LIST_REGISTERED_COUNTRIES
+BEGIN -- Inicia o bloco de comandos da procedure
+    SELECT DISTINCT COUNTRY -- Seleciona a coluna de países, removendo duplicatas para não repetir nomes
+    FROM CONT_CUSTOMERS -- Define a tabela de clientes como origem dos dados
+    ORDER BY COUNTRY ASC; -- Ordena a lista de países em ordem alfabética (A-Z)
+END // -- Finaliza o bloco de comandos usando o novo delimitador
+-- Redefine o delimitador padrão de volta para o ponto e vírgula (;)
+DELIMITER ; 
 
 -- (1) Utilizando a Procedure
 CALL LIST_REGISTERED_COUNTRIES();
@@ -391,38 +408,40 @@ CALL LIST_REGISTERED_COUNTRIES();
 
 
 -- (2) País que concentra o maior volume total investido. (SELECT)
-SELECT DISTINCT
-    C.COUNTRY AS PAIS,
-    (SELECT SUM(I.INVESTED_VALUE) 
-     FROM CONT_INVESTMENTS I 
-     WHERE I.CUSTOMER_ID IN (
+SELECT DISTINCT -- Remove duplicatas para listar cada país apenas uma vez
+    C.COUNTRY AS PAIS, -- Seleciona a coluna de país da tabela de clientes
+    (SELECT SUM(I.INVESTED_VALUE) -- Inicia uma subconsulta para somar os valores investidos
+     FROM CONT_INVESTMENTS I -- Define a tabela de investimentos como origem
+     WHERE I.CUSTOMER_ID IN ( -- Filtra investimentos cujos clientes pertençam ao país atual
          SELECT CUSTOMER_ID 
          FROM CONT_CUSTOMERS 
-         WHERE COUNTRY = C.COUNTRY
-     )) AS TOTAL_ACUMULADO
-FROM CONT_CUSTOMERS C
-ORDER BY TOTAL_ACUMULADO DESC;
+         WHERE COUNTRY = C.COUNTRY -- Faz a correlação entre o país da subconsulta e o da consulta principal
+     )) AS TOTAL_ACUMULADO -- Nomeia o resultado do cálculo da soma
+FROM CONT_CUSTOMERS C -- Define a tabela de clientes (alias C) como a fonte principal
+ORDER BY TOTAL_ACUMULADO DESC; -- Ordena os resultados do maior valor acumulado para o menor
+
 
 -- (2) Criando a Procedure
 DELIMITER //
 
-CREATE PROCEDURE RANKING_OF_INVESTMENTS_BY_COUNTRY()
-BEGIN
-    SELECT DISTINCT
-        C.COUNTRY AS PAIS,
-        (SELECT SUM(I.INVESTED_VALUE) 
-         FROM CONT_INVESTMENTS I 
-         WHERE I.CUSTOMER_ID IN (
-             SELECT CUSTOMER_ID 
-             FROM CONT_CUSTOMERS 
-             WHERE COUNTRY = C.COUNTRY
-         )) AS TOTAL_ACUMULADO
-    FROM CONT_CUSTOMERS C
-    WHERE C.COUNTRY IS NOT NULL
-    ORDER BY TOTAL_ACUMULADO DESC;
+CREATE PROCEDURE RANKING_OF_INVESTMENTS_BY_COUNTRY() -- Cria a procedure chamada RANKING_OF_INVESTMENTS_BY_COUNTRY
+BEGIN -- Inicia o bloco de comandos da procedure
+    SELECT DISTINCT -- Seleciona valores únicos para evitar a repetição de países no resultado
+        C.COUNTRY AS PAIS, -- Seleciona a coluna de país da tabela de clientes e a apelida de 'PAIS'
+        (SELECT SUM(I.INVESTED_VALUE) -- Inicia uma subconsulta para somar o valor total de investimentos
+         FROM CONT_INVESTMENTS I -- Define a tabela de investimentos (apelidada de I) como origem
+         WHERE I.CUSTOMER_ID IN ( -- Filtra investimentos vinculados aos IDs dos clientes que:
+             SELECT CUSTOMER_ID -- Buscam o ID do cliente
+             FROM CONT_CUSTOMERS -- Na tabela de clientes
+             WHERE COUNTRY = C.COUNTRY -- Onde o país seja igual ao país da linha que está sendo processada no SELECT principal
+         )) AS TOTAL_ACUMULADO -- Define o nome da coluna resultante da soma como 'TOTAL_ACUMULADO'
+    FROM CONT_CUSTOMERS C -- Define a tabela de clientes (apelidada de C) como a fonte principal da consulta
+    WHERE C.COUNTRY IS NOT NULL -- Filtra para ignorar registros onde o país não esteja preenchido
+    ORDER BY TOTAL_ACUMULADO DESC; -- Ordena o ranking do maior valor investido para o menor
+     -- Finaliza o bloco de comandos da procedure
 END //
-
-DELIMITER ;
+-- Redefine o delimitador padrão do sistema para ponto e vírgula (;)
+DELIMITER ; 
 
 -- (2) Utilizando a procedure
 CALL RANKING_OF_INVESTMENTS_BY_COUNTRY();
@@ -431,36 +450,39 @@ CALL RANKING_OF_INVESTMENTS_BY_COUNTRY();
 -- (3) No final de cada mês, verificar quanto entrou de investimento naquele mês, quanto foi gasto
 -- com custos fixos e qual foi o lucro líquido
 SELECT 
-    DATE_FORMAT(ENTRY_DATE, '%Y-%m') AS MES,
-    SUM(INVESTED_VALUE) AS TOTAL_INVESTIDO,
-    (SELECT SUM(AMOUNT) FROM FIXED_COSTS) AS TOTAL_CUSTO_FIXO,
-    SUM(INVESTED_VALUE) - (SELECT SUM(AMOUNT) FROM FIXED_COSTS) AS LUCRO_LIQUIDO
+    DATE_FORMAT(ENTRY_DATE, '%Y-%m') AS MES, -- Formata a data de entrada para o padrão 'Ano-Mês' e nomeia como MES
+    SUM(INVESTED_VALUE) AS TOTAL_INVESTIDO, -- Soma todos os valores investidos no período e nomeia como TOTAL_INVESTIDO
+    (SELECT SUM(AMOUNT) FROM FIXED_COSTS) AS TOTAL_CUSTO_FIXO, -- Subconsulta que soma todos os custos da tabela de custos fixos
+    SUM(INVESTED_VALUE) - (SELECT SUM(AMOUNT) FROM FIXED_COSTS) AS LUCRO_LIQUIDO -- Subtrai o custo total do investimento total para calcular o lucro
 FROM 
-    CONT_INVESTMENTS
+    CONT_INVESTMENTS -- Define a tabela de investimentos como a origem principal dos dados
 GROUP BY 
-    MES
+    MES -- Agrupa os resultados por mês para que os cálculos de soma sejam feitos mensalmente
 ORDER BY 
-    MES;
+    MES; -- Ordena o relatório final cronologicamente pelo mês
+
 
 -- (3) Criando Procedure
-DELIMITER //
+-- Altera o delimitador para // para que o banco ignore o ponto e vírgula interno durante a criação
 
-CREATE PROCEDURE MONTHLY_FINANCIAL_REPORT()
-BEGIN
+DELIMITER // 
+CREATE PROCEDURE MONTHLY_FINANCIAL_REPORT() -- Cria o procedimento chamado MONTHLY_FINANCIAL_REPORT
+BEGIN -- Inicia o bloco de instruções da procedure
     SELECT 
-        DATE_FORMAT(ENTRY_DATE, '%Y-%m') AS MES,
-        SUM(INVESTED_VALUE) AS TOTAL_INVESTIDO,
-        (SELECT SUM(AMOUNT) FROM FIXED_COSTS) AS TOTAL_CUSTO_FIXO,
-        SUM(INVESTED_VALUE) - (SELECT SUM(AMOUNT) FROM FIXED_COSTS) AS LUCRO_LIQUIDO
+        DATE_FORMAT(ENTRY_DATE, '%Y-%m') AS MES, -- Formata a data (Ex: 2023-10) para agrupar por mês e ano
+        SUM(INVESTED_VALUE) AS TOTAL_INVESTIDO, -- Soma todos os investimentos realizados dentro de cada mês
+        (SELECT SUM(AMOUNT) FROM FIXED_COSTS) AS TOTAL_CUSTO_FIXO, -- Busca a soma total de todos os custos fixos cadastrados
+        SUM(INVESTED_VALUE) - (SELECT SUM(AMOUNT) FROM FIXED_COSTS) AS LUCRO_LIQUIDO -- Calcula a diferença entre o investido e o custo total
     FROM 
-        CONT_INVESTMENTS
+        CONT_INVESTMENTS -- Define a tabela de investimentos como fonte dos dados principais
     GROUP BY 
-        MES
+        MES -- Agrupa os registros que possuem o mesmo mês e ano
     ORDER BY 
-        MES;
+        MES; -- Organiza o resultado final em ordem cronológica
+         -- Finaliza o bloco de comandos da procedure
 END //
-
-DELIMITER ;
+-- Restaura o delimitador padrão do sistema para ponto e vírgula (;)
+DELIMITER ; 
 
 -- (3) Utilizando Procedure
 CALL MONTHLY_FINANCIAL_REPORT();
@@ -468,32 +490,36 @@ CALL MONTHLY_FINANCIAL_REPORT();
 
 -- (4) Consulta quanto foi ganho desde o inicio do mês até o dia da consulta
 SELECT 
-    IFNULL(SUM(INVESTED_VALUE), 0) AS TOTAL_GANHO
+    -- Se a soma for nula (sem registros), o IFNULL retorna 0 em vez de vazio
+    IFNULL(SUM(INVESTED_VALUE), 0) AS TOTAL_GANHO 
 FROM 
-    CONT_INVESTMENTS
+    CONT_INVESTMENTS -- Define a tabela de investimentos como origem dos dados
 WHERE 
+    -- Filtra registros a partir do primeiro segundo do dia 01/03/2024
     ENTRY_DATE >= '2024-03-01 00:00:00' 
+    -- Filtra registros até o último segundo do dia 31/03/2024
     AND ENTRY_DATE <= '2024-03-31 23:59:59';
 
 -- (4) Criando a Procedure
-DELIMITER //
-
+-- Altera o delimitador para // para permitir que o bloco da procedure seja criado sem interrupções
+DELIMITER // 
 CREATE PROCEDURE MONTHLY_INCOME_UP_TO_THE_DATE_OF_THE_CONSULTATION(
-    IN p_data_consulta DATE
+    IN p_data_consulta DATE -- Define um parâmetro de entrada do tipo DATA para a consulta
 )
-BEGIN
+BEGIN -- Inicia o corpo do procedimento
     SELECT 
-        SUM(INVESTED_VALUE) AS TOTAL_GANHO_ATE_DATA
+        SUM(INVESTED_VALUE) AS TOTAL_GANHO_ATE_DATA -- Soma os valores investidos e nomeia a coluna de resultado
     FROM 
-        CONT_INVESTMENTS
+        CONT_INVESTMENTS -- Define a tabela de investimentos como origem
     WHERE 
-        -- Calcula o primeiro dia do mês da data informada
+        -- Filtra registros a partir do primeiro dia do mês relativo à data informada
         ENTRY_DATE >= DATE_FORMAT(p_data_consulta, '%Y-%m-01 00:00:00')
-        -- Filtra até o final do dia informado
+        -- Filtra registros até o último segundo da data específica informada no parâmetro
         AND ENTRY_DATE <= CONCAT(p_data_consulta, ' 23:59:59');
-END //
-
-DELIMITER ;
+        -- Finaliza o bloco de comandos da procedure
+END // 
+-- Retorna o delimitador padrão do sistema para ponto e vírgula (;)
+DELIMITER ; 
 
 -- (4) Utilizando a Procedure
 CALL MONTHLY_INCOME_UP_TO_THE_DATE_OF_THE_CONSULTATION('2024-03-31');
@@ -501,44 +527,50 @@ CALL MONTHLY_INCOME_UP_TO_THE_DATE_OF_THE_CONSULTATION('2024-03-31');
 
 -- (5) Qual valor é ganho por dia em média, considerando o total investido no mês dividido pelos dias do mês.
 SELECT 
-    RESUMO.ANO,
-    RESUMO.MES,
-    RESUMO.TOTAL_MES,
+    RESUMO.ANO, -- Seleciona o ano calculado na subconsulta
+    RESUMO.MES, -- Seleciona o mês calculado na subconsulta
+    RESUMO.TOTAL_MES, -- Seleciona a soma total do mês vinda da subconsulta
+    -- Divide o total do mês pelo número de dias daquele mês específico:
     RESUMO.TOTAL_MES / DAY(LAST_DAY(STR_TO_DATE(CONCAT(RESUMO.ANO, '-', RESUMO.MES, '-01'), '%Y-%m-%d'))) AS MEDIA_DIARIA
 FROM (
+    -- Subconsulta (tabela temporária 'RESUMO') para pré-agrupar os valores
     SELECT 
-        YEAR(ENTRY_DATE) AS ANO,
-        MONTH(ENTRY_DATE) AS MES,
-        SUM(INVESTED_VALUE) AS TOTAL_MES
-    FROM CONT_INVESTMENTS
-    GROUP BY YEAR(ENTRY_DATE), MONTH(ENTRY_DATE)
-) AS RESUMO;
+        YEAR(ENTRY_DATE) AS ANO, -- Extrai o ano da data de entrada
+        MONTH(ENTRY_DATE) AS MES, -- Extrai o mês da data de entrada
+        SUM(INVESTED_VALUE) AS TOTAL_MES -- Soma os valores investidos por ano/mês
+    FROM CONT_INVESTMENTS -- Tabela de origem dos investimentos
+    GROUP BY YEAR(ENTRY_DATE), MONTH(ENTRY_DATE) -- Agrupa os dados por ano e depois por mês
+) AS RESUMO; -- Apelida a subconsulta como 'RESUMO' para ser usada no SELECT principal
 
 -- (5) Criando a Procedure
-DELIMITER //
+-- Altera o delimitador padrão para // para processar o bloco da procedure inteira
+DELIMITER // 
 
 CREATE PROCEDURE DAILY_INVESTMENT_AVERAGE(
-    IN p_mes INT -- Variável para o mês que a pessoa quer pesquisar
+    IN p_mes INT -- Declara um parâmetro de entrada para receber o número do mês (1 a 12)
 )
-BEGIN
+BEGIN -- Inicia o corpo do procedimento
     SELECT 
-        RESUMO.ANO,
-        RESUMO.MES,
-        RESUMO.TOTAL_MES,
+        RESUMO.ANO, -- Seleciona o ano consolidado na subconsulta
+        RESUMO.MES, -- Seleciona o mês consolidado na subconsulta
+        RESUMO.TOTAL_MES, -- Seleciona o somatório total de investimentos do mês
+        -- Calcula a média diária dividindo o total pelo último dia do mês e arredonda para 2 casas decimais
         ROUND(RESUMO.TOTAL_MES / DAY(LAST_DAY(STR_TO_DATE(CONCAT(RESUMO.ANO, '-', RESUMO.MES, '-01'), '%Y-%m-%d'))), 2) AS MEDIA_DIARIA
     FROM (
+        -- Subconsulta para agrupar e somar os valores antes do cálculo da média
         SELECT 
-            YEAR(ENTRY_DATE) AS ANO,
-            MONTH(ENTRY_DATE) AS MES,
-            SUM(INVESTED_VALUE) AS TOTAL_MES
-        FROM CONT_INVESTMENTS
-        WHERE MONTH(ENTRY_DATE) = p_mes -- Filtra pelo mês informado
-        GROUP BY YEAR(ENTRY_DATE), MONTH(ENTRY_DATE)
-    ) AS RESUMO
-    ORDER BY RESUMO.ANO DESC;
-END //
-
-DELIMITER ;
+            YEAR(ENTRY_DATE) AS ANO, -- Extrai o ano da data de investimento
+            MONTH(ENTRY_DATE) AS MES, -- Extrai o mês da data de investimento
+            SUM(INVESTED_VALUE) AS TOTAL_MES -- Soma o valor total investido no período
+        FROM CONT_INVESTMENTS -- Tabela de origem
+        WHERE MONTH(ENTRY_DATE) = p_mes -- Filtra os dados apenas para o mês passado como parâmetro
+        GROUP BY YEAR(ENTRY_DATE), MONTH(ENTRY_DATE) -- Agrupa os resultados por ano e mês
+    ) AS RESUMO -- Define o apelido 'RESUMO' para a tabela resultante da subconsulta
+    ORDER BY RESUMO.ANO DESC; -- Ordena o resultado do ano mais recente para o mais antigo
+    -- Finaliza a procedure
+END // 
+-- Restaura o delimitador padrão para ponto e vírgula (;)
+DELIMITER ; 
 
 -- Se quiser apagar a procedure: DROP PROCEDURE IF EXISTS  SP_MEDIA_INVESTIMENTO_DIARIO;
 
@@ -549,36 +581,42 @@ CALL DAILY_INVESTMENT_AVERAGE(3);
 
 -- (6) Quanto cada cliente tem investido? Passar o id do cliente e retornar o nome, total investido e país.
 SELECT 
-    C.CUSTOMER_ID,
-    C.FULL_NAME,
-    C.COUNTRY,
+    C.CUSTOMER_ID, -- Seleciona o ID único do cliente
+    C.FULL_NAME,   -- Seleciona o nome completo do cliente
+    C.COUNTRY,     -- Seleciona o país de origem do cliente
+    -- Inicia uma subconsulta para somar os investimentos de cada cliente específico
     (SELECT SUM(I.INVESTED_VALUE) 
      FROM CONT_INVESTMENTS I 
-     WHERE I.CUSTOMER_ID = C.CUSTOMER_ID) AS TOTAL_INVESTIDO
+     -- Filtra os investimentos onde o ID do cliente na tabela I é igual ao ID do cliente na linha atual da tabela C
+     WHERE I.CUSTOMER_ID = C.CUSTOMER_ID) AS TOTAL_INVESTIDO 
 FROM 
-    CONT_CUSTOMERS C;
+    CONT_CUSTOMERS C; -- Define a tabela de clientes (apelidada como C) como a base principal da consulta
 
 -- (6) Criando a Procedure
-DELIMITER //
+-- Altera o delimitador para // para que o banco processe todo o bloco da procedure de uma vez
+DELIMITER // 
 
 CREATE PROCEDURE CLIENT_INVESTMENT_CONSULTATION(
-    IN p_customer_id INT -- Variável para o ID do cliente
+    IN p_customer_id INT -- Define um parâmetro de entrada para receber o ID do cliente desejado
 )
-BEGIN
+BEGIN -- Inicia o corpo do procedimento
     SELECT 
-        C.CUSTOMER_ID,
-        C.FULL_NAME,
-        C.COUNTRY,
+        C.CUSTOMER_ID, -- Seleciona o ID do cliente na tabela principal
+        C.FULL_NAME,   -- Seleciona o nome completo do cliente
+        C.COUNTRY,     -- Seleciona o país do cliente
+        -- Subconsulta para somar investimentos; IFNULL garante que apareça 0.00 se o cliente não tiver aportes
         (SELECT IFNULL(SUM(I.INVESTED_VALUE), 0.00) 
          FROM CONT_INVESTMENTS I 
+         -- Faz o vínculo entre a tabela de investimentos e o cliente específico da consulta
          WHERE I.CUSTOMER_ID = C.CUSTOMER_ID) AS TOTAL_INVESTIDO
     FROM 
-        CONT_CUSTOMERS C
+        CONT_CUSTOMERS C -- Define a tabela de clientes (C) como origem principal
     WHERE 
-        C.CUSTOMER_ID = p_customer_id;
-END //
-
-DELIMITER ;
+        C.CUSTOMER_ID = p_customer_id; -- Filtra os dados apenas para o cliente informado no parâmetro
+        -- Finaliza a criação da procedure
+END // 
+-- Restaura o delimitador padrão para ponto e vírgula (;)
+DELIMITER ; 
 
 -- (6) Utilizando a Procedure
 CALL CLIENT_INVESTMENT_CONSULTATION(2);
@@ -589,23 +627,24 @@ CALL CLIENT_INVESTMENT_CONSULTATION(2);
 -- Criar campanhas ou promoções justamente nos dias em que o volume financeiro naturalmente cai, 
 -- pois há períodos em que pessoas costumam a investir mais (como ex. dia 05 ou 20 do mês)
 
+-- Altera o delimitador para // para que o bloco da procedure seja lido corretamente
+DELIMITER // 
 
-DELIMITER //
-
-CREATE PROCEDURE DAILY_INVESTMENT_FLOW()
-BEGIN
+CREATE PROCEDURE DAILY_INVESTMENT_FLOW() -- Cria o procedimento chamado DAILY_INVESTMENT_FLOW
+BEGIN -- Inicia o bloco de instruções da procedure
     SELECT 
-        DAY(ENTRY_DATE) AS DIA_DO_MES,
-        COUNT(INVESTMENT_ID) AS TOTAL_DE_APORTES,
-        SUM(INVESTED_VALUE) AS VALOR_TOTAL_ACUMULADO
+        DAY(ENTRY_DATE) AS DIA_DO_MES, -- Extrai apenas o número do dia da data de entrada
+        COUNT(INVESTMENT_ID) AS TOTAL_DE_APORTES, -- Conta quantas operações de investimento ocorreram
+        SUM(INVESTED_VALUE) AS VALOR_TOTAL_ACUMULADO -- Soma o valor total investido para cada dia
     FROM 
-        CONT_INVESTMENTS
+        CONT_INVESTMENTS -- Define a tabela de investimentos como origem dos dados
     GROUP BY 
-        DAY(ENTRY_DATE)
+        DAY(ENTRY_DATE) -- Agrupa os resultados pelo número do dia (do dia 1 ao 31)
     ORDER BY 
-        TOTAL_DE_APORTES ASC; -- Ordena do dia com menos aportes para o dia com mais
-END //
+        TOTAL_DE_APORTES ASC; -- Ordena os dias, começando pelos que tiveram menos investimentos
+-- Finaliza o bloco de comandos da procedure
+END // 
+-- Restaura o delimitador padrão (ponto e vírgula)
+DELIMITER ; 
 
-DELIMITER ;
-
-CALL DAILY_INVESTMENT_FLOW();
+CALL DAILY_INVESTMENT_FLOW(); -- Executa (chama) a procedure recém-criada para exibir o relatório
